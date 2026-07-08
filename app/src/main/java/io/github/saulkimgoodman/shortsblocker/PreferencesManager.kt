@@ -33,4 +33,18 @@ class PreferencesManager(context: Context) {
     var isDebugMode: Boolean
         get() = prefs.getBoolean("debug_mode", false)
         set(value) = prefs.edit().putBoolean("debug_mode", value).apply()
+
+    /** "ALWAYS": block on detection (default). "DAILY": allow up to dailyLimitMinutes per day, then block. */
+    var limitMode: String
+        get() = prefs.getString("limit_mode", LIMIT_MODE_ALWAYS) ?: LIMIT_MODE_ALWAYS
+        set(value) = prefs.edit().putString("limit_mode", value).apply()
+
+    var dailyLimitMinutes: Int
+        get() = prefs.getInt("daily_limit_minutes", 10)
+        set(value) = prefs.edit().putInt("daily_limit_minutes", value).apply()
+
+    companion object {
+        const val LIMIT_MODE_ALWAYS = "ALWAYS"
+        const val LIMIT_MODE_DAILY = "DAILY"
+    }
 }

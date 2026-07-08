@@ -2,6 +2,9 @@ package io.github.saulkimgoodman.shortsblocker
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -13,6 +16,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     private val facebookDetector = FacebookReelsDetector()
 
     private lateinit var prefs: PreferencesManager
+    private lateinit var usage: UsageTracker
     private var lastBlockedTime = 0L
     private val debounceDelayMs = 800L // 0.8 seconds debounce
 
@@ -22,9 +26,46 @@ class BlockerAccessibilityService : AccessibilityService() {
     private var lastScanTime = 0L
     private val scanThrottleIntervalMs = 150L
 
+    // Daily-limit mode: while the user is on a short-form screen we run a 1s "session tick"
+    // that accumulates watch time and blocks once the daily allowance is spent.
+    private val handler = Handler(Looper.getMainLooper())
+    private var sessionPackage: String? = null
+    private var lastTickElapsed = 0L
+    private val tickIntervalMs = 1000L
+
+    private val sessionTick = object : Runnable {
+        override fun run() {
+            val pkg = sessionPackage ?: return
+            val now = SystemClock.elapsedRealtime()
+            val delta = now - lastTickElapsed
+            lastTickElapsed = now
+            // Ignore absurd gaps (device slept mid-session); count only real watch time.
+            if (delta in 1..(tickIntervalMs * 5)) {
+                usage.addUsage(pkg, delta)
+            }
+
+            val root = rootInActiveWindow
+            val stillOnShorts = root != null &&
+                    root.packageName?.toString() == pkg &&
+                    isShortFormScreen(pkg, root)
+            if (!stillOnShorts) {
+                endSession()
+                return
+            }
+
+            if (isDailyLimitExhausted()) {
+                endSession()
+                executeBlockAction(pkg, limitReached = true)
+                return
+            }
+            handler.postDelayed(this, tickIntervalMs)
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = PreferencesManager(this)
+        usage = UsageTracker(this)
         Log.d("ShortsBlocker", "Service connected successfully")
     }
 
@@ -64,22 +105,60 @@ class BlockerAccessibilityService : AccessibilityService() {
             else -> false
         }
 
-        if (!isTarget) return
+        if (!isTarget) {
+            endSession()
+            return
+        }
 
-        // Run matching logic
-        val shouldBlock = when (packageName) {
+        val onShortForm = isShortFormScreen(packageName, rootNode)
+
+        if (!onShortForm) {
+            endSession()
+            return
+        }
+
+        if (prefs.limitMode == PreferencesManager.LIMIT_MODE_DAILY && !isDailyLimitExhausted()) {
+            // Allowance remaining: let the user watch and meter the time instead of blocking.
+            startSession(packageName)
+        } else {
+            endSession()
+            executeBlockAction(
+                packageName,
+                limitReached = prefs.limitMode == PreferencesManager.LIMIT_MODE_DAILY
+            )
+        }
+    }
+
+    private fun isShortFormScreen(packageName: String, rootNode: AccessibilityNodeInfo): Boolean {
+        return when (packageName) {
             DetectionSignatures.PACKAGE_YOUTUBE -> youtubeDetector.isShortForm(rootNode)
             DetectionSignatures.PACKAGE_INSTAGRAM -> instagramDetector.isShortForm(rootNode)
             DetectionSignatures.PACKAGE_FACEBOOK -> facebookDetector.isShortForm(rootNode)
             else -> false
         }
-
-        if (shouldBlock) {
-            executeBlockAction(packageName)
-        }
     }
 
-    private fun executeBlockAction(packageName: String) {
+    private fun isDailyLimitExhausted(): Boolean {
+        if (prefs.limitMode != PreferencesManager.LIMIT_MODE_DAILY) return false
+        return usage.todayTotalMs() >= prefs.dailyLimitMinutes * 60_000L
+    }
+
+    private fun startSession(packageName: String) {
+        if (sessionPackage == packageName) return // tick already running
+        endSession()
+        sessionPackage = packageName
+        lastTickElapsed = SystemClock.elapsedRealtime()
+        handler.postDelayed(sessionTick, tickIntervalMs)
+        Log.d("ShortsBlocker", "Usage session started for $packageName")
+    }
+
+    private fun endSession() {
+        if (sessionPackage == null) return
+        sessionPackage = null
+        handler.removeCallbacks(sessionTick)
+    }
+
+    private fun executeBlockAction(packageName: String, limitReached: Boolean = false) {
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastBlockedTime < debounceDelayMs) {
             // Debounce active: ignore duplicate trigger on the same active screen transition
@@ -93,6 +172,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         } else {
             val intent = Intent(this, BlockOverlayActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(BlockOverlayActivity.EXTRA_LIMIT_REACHED, limitReached)
             }
             startActivity(intent)
         }
@@ -116,6 +196,12 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        endSession()
         Log.d("ShortsBlocker", "Service interrupted")
+    }
+
+    override fun onDestroy() {
+        endSession()
+        super.onDestroy()
     }
 }

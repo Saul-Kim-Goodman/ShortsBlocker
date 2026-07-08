@@ -18,7 +18,10 @@ ShortsBlocker는 유튜브 쇼츠, 인스타그램 릴스, 페이스북 릴스 �
 - 모든 처리는 기기 내부에서만(온디바이스) 이루어집니다.
 
 ### 앱 설정 데이터
-차단 대상 앱 선택, 차단 방식 등 사용자가 지정한 설정은 기기 내부 저장소에만 보관되며 앱을 삭제하면 함께 삭제됩니다.
+차단 대상 앱 선택, 차단 방식 등 사용자가 지정한 설정은 기기 내부 저장소에만 보관되며 앱을 삭제하면 함께 삭제됩니다. 숏폼 시청 시간 기록(일별 합계) 역시 기기 내부에만 저장됩니다.
+
+### 사용 정보 접근 권한(PACKAGE_USAGE_STATS)
+'오늘의 전체 앱 사용 시간' 기능을 사용하도록 선택한 경우, ShortsBlocker는 Android 시스템의 사용 정보 접근 권한을 통해 기기에 기록된 앱별 사용 시간을 읽어 화면에 표시합니다. 이 정보는 조회 즉시 화면 표시에만 사용되며, 저장·기록·전송되지 않습니다. 권한을 허용하지 않아도 차단 기능은 정상 작동합니다.
 
 ### 제3자 제공
 없음. 광고 SDK, 분석 도구, 외부 서버가 일절 포함되어 있지 않습니다.
@@ -42,7 +45,10 @@ ShortsBlocker uses the Android AccessibilityService API solely to detect and blo
 - All processing happens on-device.
 
 ### App Settings
-Your preferences (which apps to block, block mode, etc.) are stored only in local device storage and are deleted when you uninstall the app.
+Your preferences (which apps to block, block mode, etc.) and your daily short-form watch-time totals are stored only in local device storage and are deleted when you uninstall the app.
+
+### Usage Access Permission (PACKAGE_USAGE_STATS)
+If you opt in to the "today's app usage" feature, ShortsBlocker reads per-app usage times recorded by the Android system via the Usage Access permission, solely to display them on screen. This information is never stored, logged, or transmitted. The blocking features work fully without this permission.
 
 ### Third Parties
 None. The app contains no ads, no analytics, and no external servers.

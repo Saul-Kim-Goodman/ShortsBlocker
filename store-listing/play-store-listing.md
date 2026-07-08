@@ -30,6 +30,8 @@
 >
 > ■ 주요 기능
 > • 앱별 개별 차단: 유튜브 / 인스타그램 / 페이스북 각각 켜고 끌 수 있습니다
+> • 하루 허용 시간: 하루 10분처럼 정해진 만큼만 허용하고, 다 쓰면 자동 차단 (5/10/15/30/60분)
+> • 사용 시간 기록: 오늘·최근 7일 숏폼 시청 시간과 전체 앱 사용 시간을 한눈에
 > • 두 가지 차단 방식: 즉시 뒤로가기 또는 차단 안내 화면(오버레이) 표시
 > • 나만의 차단 메시지: 차단 화면에 표시할 문구를 직접 설정
 > • 마스터 스위치: 한 번에 전체 켜기/끄기
@@ -55,6 +57,8 @@
 >
 > ■ Features
 > • Per-app control: toggle YouTube / Instagram / Facebook independently
+> • Daily allowance: permit e.g. 10 minutes of shorts per day, then block automatically (5/10/15/30/60 min)
+> • Usage insights: today's and last-7-days shorts watch time, plus overall app usage
 > • Two block modes: instant back-navigation, or a friendly block screen (overlay)
 > • Custom block message: write your own reminder on the block screen
 > • Master switch: enable/disable everything at once

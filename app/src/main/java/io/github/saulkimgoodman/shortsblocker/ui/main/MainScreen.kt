@@ -34,7 +34,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.navigation3.runtime.NavKey
 import io.github.saulkimgoodman.shortsblocker.BlockerAccessibilityService
+import io.github.saulkimgoodman.shortsblocker.DetectionSignatures
 import io.github.saulkimgoodman.shortsblocker.PreferencesManager
+import io.github.saulkimgoodman.shortsblocker.UsageTracker
+import java.time.LocalDate
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,14 +50,38 @@ fun MainScreen(
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
     val prefs = remember { PreferencesManager(context) }
+    val usageTracker = remember { UsageTracker(context) }
 
     // Service & Battery states checked on start / resume
     var isServiceActive by remember { mutableStateOf(false) }
     var isIgnoringBattery by remember { mutableStateOf(false) }
 
+    // Usage stats states
+    var hasUsagePermission by remember { mutableStateOf(false) }
+    var appUsage by remember { mutableStateOf(emptyList<AppUsageEntry>()) }
+    var todayTotalMs by remember { mutableStateOf(0L) }
+    var ytMs by remember { mutableStateOf(0L) }
+    var igMs by remember { mutableStateOf(0L) }
+    var fbMs by remember { mutableStateOf(0L) }
+    var recentDays by remember { mutableStateOf(emptyList<Pair<LocalDate, Long>>()) }
+
     fun refreshStates() {
         isServiceActive = checkAccessibilityServiceActive(context)
         isIgnoringBattery = checkBatteryOptimizationIgnored(context)
+        hasUsagePermission = hasUsageAccessPermission(context)
+        appUsage = if (hasUsagePermission) queryTodayAppUsage(context) else emptyList()
+    }
+
+    // Live refresh of shorts watch time while the screen is visible
+    LaunchedEffect(Unit) {
+        while (true) {
+            todayTotalMs = usageTracker.todayTotalMs()
+            ytMs = usageTracker.todayMsFor(DetectionSignatures.PACKAGE_YOUTUBE)
+            igMs = usageTracker.todayMsFor(DetectionSignatures.PACKAGE_INSTAGRAM)
+            fbMs = usageTracker.todayMsFor(DetectionSignatures.PACKAGE_FACEBOOK)
+            recentDays = usageTracker.recentDays(7)
+            delay(2000)
+        }
     }
 
     // Refresh states when the screen becomes visible
@@ -70,6 +98,8 @@ fun MainScreen(
     var blockMode by remember { mutableStateOf(prefs.blockMode) }
     var customMsg by remember { mutableStateOf(prefs.customMessage) }
     var debugEnabled by remember { mutableStateOf(prefs.isDebugMode) }
+    var limitMode by remember { mutableStateOf(prefs.limitMode) }
+    var dailyLimitMinutes by remember { mutableStateOf(prefs.dailyLimitMinutes) }
 
     Scaffold(
         topBar = {
@@ -136,7 +166,23 @@ fun MainScreen(
                 }
             )
 
-            // 4. Blocking Action Options Card
+            // 4. Limit Mode Card (always block vs daily allowance)
+            LimitModeCard(
+                enabled = masterEnabled,
+                limitMode = limitMode,
+                onLimitModeChanged = {
+                    limitMode = it
+                    prefs.limitMode = it
+                },
+                dailyLimitMinutes = dailyLimitMinutes,
+                onLimitMinutesChanged = {
+                    dailyLimitMinutes = it
+                    prefs.dailyLimitMinutes = it
+                },
+                todayTotalMs = todayTotalMs
+            )
+
+            // 5. Blocking Action Options Card
             ActionConfigCard(
                 enabled = masterEnabled, // Disable if master is OFF
                 blockMode = blockMode,
@@ -152,14 +198,27 @@ fun MainScreen(
                 onFocusClear = { focusManager.clearFocus() }
             )
 
-            // 5. Optimization & Onboarding Card
+            // 6. Usage Statistics Card
+            UsageStatsCard(
+                ytMs = ytMs,
+                igMs = igMs,
+                fbMs = fbMs,
+                recentDays = recentDays,
+                hasUsagePermission = hasUsagePermission,
+                appUsage = appUsage,
+                onRequestUsagePermission = {
+                    context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                }
+            )
+
+            // 7. Optimization & Onboarding Card
             OnboardingCard(
                 context = context,
                 isIgnoringBattery = isIgnoringBattery,
                 onRefreshStates = { refreshStates() }
             )
 
-            // 6. Debug Mode Toggle Card
+            // 8. Debug Mode Toggle Card
             DebugCard(
                 debugEnabled = debugEnabled,
                 onDebugChanged = {

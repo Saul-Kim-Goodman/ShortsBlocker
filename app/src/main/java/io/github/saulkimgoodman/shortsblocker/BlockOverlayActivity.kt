@@ -22,14 +22,19 @@ import io.github.saulkimgoodman.shortsblocker.theme.ShortsBlockerTheme
 class BlockOverlayActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         val prefs = PreferencesManager(this)
-        val customMessage = prefs.customMessage
+        val limitReached = intent.getBooleanExtra(EXTRA_LIMIT_REACHED, false)
+        val message = if (limitReached) {
+            "오늘의 숏폼 허용 시간 ${prefs.dailyLimitMinutes}분을 모두 사용했어요.\n내일 다시 이용할 수 있습니다."
+        } else {
+            prefs.customMessage
+        }
 
         setContent {
             ShortsBlockerTheme {
                 BlockOverlayContent(
-                    message = customMessage,
+                    message = message,
                     onClose = {
                         // Close activity
                         finish()
@@ -37,6 +42,10 @@ class BlockOverlayActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_LIMIT_REACHED = "extra_limit_reached"
     }
 }
 
