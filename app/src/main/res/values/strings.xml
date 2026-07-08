@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ShortsBlocker</string>
+    <string name="accessibility_service_description">ShortsBlocker는 유튜브 쇼츠, 인스타그램 릴스, 페이스북 릴스의 화면을 감지하고 차단합니다.</string>
+</resources>
