@@ -20,6 +20,14 @@ class BlockerAccessibilityService : AccessibilityService() {
     private var lastBlockedTime = 0L
     private val debounceDelayMs = 800L // 0.8 seconds debounce
 
+    // Back-mode guard: fire the back gesture exactly once per short-form entry.
+    // Detection lingers for a few hundred ms while the back navigation animates,
+    // so without this a second (and third) back press would fire and pop the user
+    // clear out of the app to the launcher. We only want to leave the short-form
+    // feed, not the app — so we suppress further backs until a non-short-form
+    // screen is observed (see the reset points in onAccessibilityEvent).
+    private var blockedCurrentShort = false
+
     // Battery Optimization Check: Throttling interval for content changes.
     // Screen scanning is a heavy CPU operation. Throttling checks to once every 150ms
     // during layout animations or scrolls saves up to 90% CPU usage with zero latency impact.
@@ -107,13 +115,17 @@ class BlockerAccessibilityService : AccessibilityService() {
 
         if (!isTarget) {
             endSession()
+            blockedCurrentShort = false
             return
         }
 
         val onShortForm = isShortFormScreen(packageName, rootNode)
 
         if (!onShortForm) {
+            // Left the short-form feed (e.g. back navigation landed on the home
+            // feed). Re-arm so the next entry can be blocked again.
             endSession()
+            blockedCurrentShort = false
             return
         }
 
@@ -159,23 +171,32 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     private fun executeBlockAction(packageName: String, limitReached: Boolean = false) {
+        if (prefs.blockMode == "BACK") {
+            // Fire the back gesture only once per short-form entry so the user lands
+            // back on the app's previous screen (e.g. YouTube home) instead of being
+            // pushed all the way out to the launcher by repeated back presses.
+            // blockedCurrentShort is reset once a non-short-form screen is seen.
+            if (blockedCurrentShort) return
+            blockedCurrentShort = true
+            Log.i("ShortsBlocker", "Short-form content detected on $packageName! Navigating back out of the feed.")
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            return
+        }
+
+        // Overlay mode: cover the screen with the block message. Time-based debounce
+        // avoids stacking multiple overlay launches during a single screen transition.
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastBlockedTime < debounceDelayMs) {
-            // Debounce active: ignore duplicate trigger on the same active screen transition
             return
         }
         lastBlockedTime = currentTime
-        Log.i("ShortsBlocker", "Short-form content detected on $packageName! Triggering block.")
+        Log.i("ShortsBlocker", "Short-form content detected on $packageName! Showing overlay.")
 
-        if (prefs.blockMode == "BACK") {
-            performGlobalAction(GLOBAL_ACTION_BACK)
-        } else {
-            val intent = Intent(this, BlockOverlayActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(BlockOverlayActivity.EXTRA_LIMIT_REACHED, limitReached)
-            }
-            startActivity(intent)
+        val intent = Intent(this, BlockOverlayActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(BlockOverlayActivity.EXTRA_LIMIT_REACHED, limitReached)
         }
+        startActivity(intent)
     }
 
     private fun logNodeTree(node: AccessibilityNodeInfo?, depth: Int = 0) {
