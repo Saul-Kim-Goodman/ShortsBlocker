@@ -15,9 +15,12 @@ abstract class BaseShortFormDetector : ShortFormDetector {
         if (node == null) return false
         
         // Optimization 1: Max depth limit pruning.
-        // Screen containers for Shorts/Reels are top-level parent views (typically within 8-10 hierarchy levels).
-        // Pruning deep hierarchies avoids unnecessary leaf-node searches.
-        if (depth > 10) return false
+        // Short-form container markers can sit deep in the tree — e.g. YouTube's
+        // reel_recycler / reel_watch_fragment_root live around depth 17-19 in recent
+        // app versions. Cutting off too early (the old limit of 10) meant the markers
+        // were never reached and nothing was blocked. Keep a generous cap that still
+        // bounds pathological trees while comfortably covering real layouts.
+        if (depth > 30) return false
         
         // Optimization 2: Visibility pruning. Skip invisible subtrees completely.
         if (!node.isVisibleToUser) {
